@@ -38,7 +38,7 @@ interface PaginatedResponse<T> {
   data: T[]
 }
 
-const API_BASE = 'http://192.168.178.23:5000'
+const API_BASE = 'http://192.168.178.98:5000'
 const API_KEY = '123abc'
 const ITEMS_PER_PAGE = 20
 
@@ -111,7 +111,7 @@ export default function Home() {
       sensorUrl.searchParams.append('key', API_KEY)
       sensorUrl.searchParams.append('timestamp_after', timestamp_after)
       sensorUrl.searchParams.append('timestamp_before', timestamp_before)
-      sensorUrl.searchParams.append('limit', '100')
+      sensorUrl.searchParams.append('limit', '3000')
       sensorUrl.searchParams.append('sort', 'asc')
       
       const sensorRes = await fetch(sensorUrl.toString())

@@ -1,9 +1,12 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
+from flask_cors import CORS
 import base64
 from datetime import datetime
 
+
 app = Flask(__name__)
+CORS(app)
 
 # Configuration
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///data.db"
@@ -31,6 +34,12 @@ def validate_key(key):
     return key == API_KEY
 
 # Routes
+
+@app.route('/uploads/<path:path>')
+def send_report(path):
+    # Using request args for path will expose you to directory traversal attacks
+    return send_from_directory('uploads', path)
+
 @app.route("/upload_picture", methods=["POST"])
 def upload_picture():
     key = request.args.get("key")
@@ -73,7 +82,7 @@ def upload_sensor_data():
     humidity = data.get("humidity")
     soil_humidity = data.get("soil_humidity")
 
-    if temperature is None or humidity is None or not soil_humidity:
+    if temperature is None or humidity is None:
         return jsonify({"error": "Missing temperature, humidity, or timestamp"}), 400
 
     try:
@@ -90,8 +99,6 @@ def upload_sensor_data():
         return jsonify({"error": str(e)}), 500
 
 
-from flask import request, jsonify
-from datetime import datetime
 
 @app.route("/pictures", methods=["GET"])
 def get_pictures():
@@ -101,8 +108,8 @@ def get_pictures():
 
     limit = request.args.get("limit", default=10, type=int)
     page = request.args.get("page", default=1, type=int)
-    timestamp_after = request.args.get("timestamp_after")
-    timestamp_before = request.args.get("timestamp_before")
+    timestamp_after = request.args.get("timestamp_after").rstrip("Z") + "+00:00"
+    timestamp_before = request.args.get("timestamp_before").rstrip("Z") + "+00:00"
     sort = request.args.get("sort", default="asc")  # "asc" or "desc"
 
     # Base query
@@ -139,8 +146,8 @@ def get_sensor_data():
 
     limit = request.args.get("limit", default=10, type=int)
     page = request.args.get("page", default=1, type=int)
-    timestamp_after = request.args.get("timestamp_after")
-    timestamp_before = request.args.get("timestamp_before")
+    timestamp_after = request.args.get("timestamp_after").rstrip("Z") + "+00:00"
+    timestamp_before = request.args.get("timestamp_before").rstrip("Z") + "+00:00"
     sort = request.args.get("sort", default="asc")  # "asc" or "desc"
 
     # Base query
@@ -220,4 +227,4 @@ def initialize_once():
     
 
 if __name__ == "__main__":
-    app.run(host="192.168.178.23",debug=True)
+    app.run(host="192.168.178.98",debug=True)
