@@ -46,16 +46,12 @@ def upload_picture():
     try:
         # Decode and save the image
         decoded_image = base64.b64decode(image_base64)
-        print("here1")
         timestamp_obj = datetime.now()
         file_path = f"uploads/{timestamp_obj.strftime('%Y%m%d%H%M%S')}.jpg"
-        print("here2")
         with open(file_path, "wb") as f:
             f.write(decoded_image)
-        print("here3")
         # Save to the database
         picture = Picture(timestamp=timestamp_obj, image_path=file_path)
-        print("here4")
         db.session.add(picture)
         db.session.commit()
 
