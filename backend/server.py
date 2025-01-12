@@ -90,7 +90,9 @@ def upload_sensor_data():
         return jsonify({"error": str(e)}), 500
 
 
-# CRUD Endpoints
+from flask import request, jsonify
+from datetime import datetime
+
 @app.route("/pictures", methods=["GET"])
 def get_pictures():
     key = request.args.get("key")
@@ -99,7 +101,29 @@ def get_pictures():
 
     limit = request.args.get("limit", default=10, type=int)
     page = request.args.get("page", default=1, type=int)
-    pictures = Picture.query.paginate(page=page, per_page=limit)
+    timestamp_after = request.args.get("timestamp_after")
+    timestamp_before = request.args.get("timestamp_before")
+    sort = request.args.get("sort", default="asc")  # "asc" or "desc"
+
+    # Base query
+    query = Picture.query
+
+    # Filter by timestamp range
+    if timestamp_after:
+        timestamp_after = datetime.fromisoformat(timestamp_after)
+        query = query.filter(Picture.timestamp >= timestamp_after)
+    if timestamp_before:
+        timestamp_before = datetime.fromisoformat(timestamp_before)
+        query = query.filter(Picture.timestamp <= timestamp_before)
+
+    # Sort by timestamp
+    if sort == "desc":
+        query = query.order_by(Picture.timestamp.desc())
+    else:
+        query = query.order_by(Picture.timestamp.asc())
+
+    # Pagination
+    pictures = query.paginate(page=page, per_page=limit)
     data = [
         {"id": pic.id, "timestamp": pic.timestamp.isoformat(), "image_path": pic.image_path}
         for pic in pictures.items
@@ -115,7 +139,29 @@ def get_sensor_data():
 
     limit = request.args.get("limit", default=10, type=int)
     page = request.args.get("page", default=1, type=int)
-    sensor_data = SensorData.query.paginate(page=page, per_page=limit)
+    timestamp_after = request.args.get("timestamp_after")
+    timestamp_before = request.args.get("timestamp_before")
+    sort = request.args.get("sort", default="asc")  # "asc" or "desc"
+
+    # Base query
+    query = SensorData.query
+
+    # Filter by timestamp range
+    if timestamp_after:
+        timestamp_after = datetime.fromisoformat(timestamp_after)
+        query = query.filter(SensorData.timestamp >= timestamp_after)
+    if timestamp_before:
+        timestamp_before = datetime.fromisoformat(timestamp_before)
+        query = query.filter(SensorData.timestamp <= timestamp_before)
+
+    # Sort by timestamp
+    if sort == "desc":
+        query = query.order_by(SensorData.timestamp.desc())
+    else:
+        query = query.order_by(SensorData.timestamp.asc())
+
+    # Pagination
+    sensor_data = query.paginate(page=page, per_page=limit)
     data = [
         {
             "id": s.id,
@@ -127,6 +173,7 @@ def get_sensor_data():
         for s in sensor_data.items
     ]
     return jsonify({"sensor_data": data, "total": sensor_data.total}), 200
+
 
 
 @app.route("/sensor_data/<int:id>", methods=["DELETE"])
