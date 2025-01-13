@@ -8,7 +8,7 @@ const char* ssid = "red";
 const char* password = "acted";
 
 // Backend server details
-const char* serverUrl = "http://192.168.178.23:5000/upload_sensor_data"; // Adjust to your backend IP
+const char* serverUrl = "http://192.168.178.98:5000/upload_sensor_data"; // Adjust to your backend IP
 const char* apiKey = "123abc"; // Backend API key
 
 // Constants
@@ -81,8 +81,11 @@ String getCurrentTimestamp() {
 void loop() {
   // Read soil humidity
   soilHumidity = analogRead(hygrometer);
-  soilHumidity = constrain(soilHumidity, 400, 1023);
-  soilHumidity = map(soilHumidity, 400, 1023, 100, 0);
+  Serial.print("Soil Humidity raw: ");
+  Serial.print(soilHumidity);
+  soilHumidity = constrain(soilHumidity, 900, 4095);
+  soilHumidity = map(soilHumidity, 900, 4095, 100, 0);
+  
 
   // Read DHT sensor values
   humidity = dht.readHumidity();
