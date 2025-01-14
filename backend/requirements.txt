@@ -1,0 +1,4 @@
+flask
+flask_sqlalchemy
+pillow
+flask_cors
