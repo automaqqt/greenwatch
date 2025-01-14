@@ -7,6 +7,15 @@ import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
 import { Slider } from '@/components/ui/slider'
 import {
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+  CarouselNext,
+  CarouselPrevious,
+  type CarouselApi
+} from "@/components/ui/carousel"
+
+import {
   LineChart,
   Line,
   XAxis,
@@ -40,7 +49,12 @@ interface PaginatedResponse<T> {
 
 const API_BASE = 'http://192.168.178.98:5000'
 const API_KEY = '123abc'
-const ITEMS_PER_PAGE = 20
+const ITEMS_PER_PAGE = 6*24
+
+const CURRENT_IMG : Picture = {
+  id: 0,
+  timestamp: 'current',
+  image_path: '/uploads/current.jpg'}
 
 export default function Home() {
   // Auth state
@@ -61,6 +75,7 @@ export default function Home() {
   const [sensorData, setSensorData] = useState<SensorData[]>([])
   const [selectedPicture, setSelectedPicture] = useState<Picture | null>(null)
   const [nearestSensorData, setNearestSensorData] = useState<SensorData | null>(null)
+  const [carouselApi, setCarouselApi] = useState<CarouselApi>()
   const [loading, setLoading] = useState({
     pictures: false,
     sensorData: false
@@ -74,17 +89,28 @@ export default function Home() {
     }
   }
 
-  // Calculate time range for API requests
-  const getTimeRange = useCallback(() => {
-    const end = new Date(selectedDate)
-    end.setHours(23, 59, 59, 999)
-    const start = new Date(selectedDate)
-    start.setHours(Math.max(0, end.getHours() - timeRange), 0, 0, 0)
-    return {
-      timestamp_after: start.toISOString(),
-      timestamp_before: end.toISOString()
-    }
-  }, [selectedDate, timeRange])
+const getTimeRange = useCallback(() => {
+  const end = new Date(selectedDate);
+  end.setHours(23, 59, 59, 999); // End of the selected date
+
+  let start = new Date(selectedDate);
+  start.setHours(0, 0, 0, 0); // Start of the selected date
+  console.log(start.toDateString())
+  // add timerange if selecteddate is not today
+  if (start.toDateString() === new Date().toDateString()) {
+    start = new Date();
+    start.setHours(start.getHours() - timeRange);
+  }
+  
+
+  // Ensure the adjusted start doesn't go before the start of the day
+  //const finalStart = adjustedStart < start ? start : adjustedStart;
+
+  return {
+    timestamp_after: start.toISOString(),
+    timestamp_before: end.toISOString(),
+  };
+}, [selectedDate, timeRange]);
 
   // Fetch data from API
   const fetchData = useCallback(async () => {
@@ -100,11 +126,12 @@ export default function Home() {
       picturesUrl.searchParams.append('timestamp_after', timestamp_after)
       picturesUrl.searchParams.append('timestamp_before', timestamp_before)
       picturesUrl.searchParams.append('limit', ITEMS_PER_PAGE.toString())
-      picturesUrl.searchParams.append('sort', 'asc')
+      picturesUrl.searchParams.append('sort', 'desc')
       
       const picturesRes = await fetch(picturesUrl.toString())
       const picturesData = await picturesRes.json()
       setPictures(picturesData.pictures)
+      setSelectedPicture(CURRENT_IMG)
 
       // Fetch sensor data
       const sensorUrl = new URL(`${API_BASE}/sensor_data`)
@@ -126,13 +153,24 @@ export default function Home() {
 
   // Fetch data when date/time changes
   useEffect(() => {
-    fetchData()
+    fetchData();
+    // Set up the interval to refresh data
+    const interval = setInterval(() => {
+      fetchData();
+    }, 60000*1); // 5 seconds
+
+    // Clean up the interval on unmount
+    return () => clearInterval(interval);
   }, [fetchData])
 
   // Find nearest sensor data when picture selected
   useEffect(() => {
     if (selectedPicture && sensorData.length > 0) {
-      const selectedTime = new Date(selectedPicture.timestamp).getTime()
+
+      let selectedTime = new Date(selectedPicture.timestamp).getTime()
+      if (selectedPicture.id === 0) {
+        selectedTime = new Date().getTime()
+      }
       const nearest = sensorData.reduce((prev, curr) => {
         const prevDiff = Math.abs(new Date(prev.timestamp).getTime() - selectedTime)
         const currDiff = Math.abs(new Date(curr.timestamp).getTime() - selectedTime)
@@ -141,6 +179,18 @@ export default function Home() {
       setNearestSensorData(nearest)
     }
   }, [selectedPicture, sensorData])
+
+  useEffect(() => {
+    if (!carouselApi) {
+      return
+    }
+    
+    carouselApi.on("select", () => {
+      //console.log(pictures)
+      
+      setSelectedPicture(pictures[carouselApi.selectedScrollSnap() ])
+    })
+  }, [carouselApi, pictures])
 
   // Custom tooltip for graphs
   const CustomTooltip = ({ active, payload, label }: any) => {
@@ -294,9 +344,10 @@ export default function Home() {
                     <Slider
                       value={[timeRange]}
                       onValueChange={(value) => setTimeRange(value[0])}
-                      max={24}
+                      max={48}
                       step={1}
                       className="mt-2"
+                      disabled={(new Date(selectedDate).toDateString() !== new Date().toDateString())}
                     />
                     <p className="text-sm text-gray-500 text-right mt-2">
                       {timeRange} hours selected
@@ -327,6 +378,7 @@ export default function Home() {
                             src={`${API_BASE}/${selectedPicture.image_path}`}
                             alt="Plant"
                             className="w-full h-full object-cover"
+                            style={{ transform: 'rotate(180deg)' }}
                           />
                         </div>
                         {nearestSensorData && (
@@ -354,10 +406,41 @@ export default function Home() {
                       </Card>
                     )}
 
-                    {/* Picture grid */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                      {pictures.map(picture => (
+                    {/* Picture carousel */}
+                    <div className="flex justify-center">
+                    <Carousel className="w-full max-w-sm lg:max-w-xl" setApi={setCarouselApi} opts={{
+                                                    align: "start",
+                                                    dragFree: true,
+                                                  }}>
+                      <CarouselContent>
+                        <CarouselItem key={12345} className="basis-1/3 lg:basis-1/5">
                         <Card
+                          key={12345}
+                          className={`overflow-hidden cursor-pointer transition-all hover:shadow-lg ${
+                            selectedPicture?.id === CURRENT_IMG.id 
+                              ? 'ring-2 ring-blue-500 shadow-lg' 
+                              : 'hover:ring-1 hover:ring-blue-200'
+                          }`}
+                          onClick={() => setSelectedPicture(CURRENT_IMG)}
+                        >
+                          <div className="aspect-square bg-gray-100">
+                            <img
+                              src={`${API_BASE}/${CURRENT_IMG.image_path}`}
+                              alt="Plant"
+                              className="w-full h-full object-cover"
+                              style={{ transform: 'rotate(180deg)' }}
+                            />
+                          </div>
+                          <div className="p-3">
+                            <p className="text-sm text-gray-600">
+                              {new Date().toLocaleString()}
+                            </p>
+                          </div>
+                        </Card>
+                        </CarouselItem>
+                        {pictures.map(picture => (
+                          <CarouselItem key={picture.id} className="basis-1/3 lg:basis-1/5">
+                            <Card
                           key={picture.id}
                           className={`overflow-hidden cursor-pointer transition-all hover:shadow-lg ${
                             selectedPicture?.id === picture.id 
@@ -371,6 +454,7 @@ export default function Home() {
                               src={`${API_BASE}/${picture.image_path}`}
                               alt="Plant"
                               className="w-full h-full object-cover"
+                              style={{ transform: 'rotate(180deg)' }}
                             />
                           </div>
                           <div className="p-3">
@@ -379,9 +463,17 @@ export default function Home() {
                             </p>
                           </div>
                         </Card>
+                          </CarouselItem>
+                        
                       ))}
+                      </CarouselContent>
+                      <CarouselPrevious />
+                      <CarouselNext />
+                    </Carousel>
+                    
+                      
                     </div>
-                  </div>
+                    </div>
                 )}
 
 

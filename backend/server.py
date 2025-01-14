@@ -1,8 +1,9 @@
 from flask import Flask, request, jsonify, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
-import base64
+import base64, io
 from datetime import datetime
+from PIL import Image
 
 
 app = Flask(__name__)
@@ -50,24 +51,49 @@ def upload_picture():
     image_base64 = data.get("image")
 
     if not image_base64:
-        return jsonify({"error": "Missing image or timestamp"}), 400
+        return jsonify({"error": "Missing image"}), 400
 
     try:
-        # Decode and save the image
+        # Decode the image
         decoded_image = base64.b64decode(image_base64)
+        image = Image.open(io.BytesIO(decoded_image))
+
+        # Rotate the image 90 degrees to the right
+        rotated_image = image
+
+        # Save the image as current.jpg
+        current_image_path = "uploads/current.jpg"
+        rotated_image.save(current_image_path)
+
+        # Check if 10 minutes have passed since the last saved picture
+        last_picture = Picture.query.order_by(Picture.timestamp.desc()).first()
         timestamp_obj = datetime.now()
-        file_path = f"uploads/{timestamp_obj.strftime('%Y%m%d%H%M%S')}.jpg"
-        with open(file_path, "wb") as f:
-            f.write(decoded_image)
-        # Save to the database
-        picture = Picture(timestamp=timestamp_obj, image_path=file_path)
-        db.session.add(picture)
-        db.session.commit()
+
+        if not last_picture or (timestamp_obj - last_picture.timestamp).total_seconds() > 540:  # 10 minutes
+            # Save the image with a timestamped filename
+            day_or_night = "d"
+            try:
+                grayscale_image = rotated_image.convert("L")
+                avg_brightness = sum(grayscale_image.getdata()) / len(grayscale_image.getdata())
+                if avg_brightness < 50:
+                    day_or_night = "n"
+            except Exception as e:
+                print(f"Error analyzing brightness: {e}")
+
+            file_suffix = day_or_night
+            file_path = f"uploads/{timestamp_obj.strftime('%Y%m%d%H%M%S')}_{file_suffix}.jpg"
+            rotated_image.save(file_path)
+
+            # Save the record to the database
+            picture = Picture(timestamp=timestamp_obj, image_path=file_path)
+            db.session.add(picture)
+            db.session.commit()
 
         return jsonify({"message": "Picture uploaded successfully"}), 200
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
 
 
 @app.route("/upload_sensor_data", methods=["POST"])
@@ -78,6 +104,7 @@ def upload_sensor_data():
         return jsonify({"error": "Invalid API key"}), 403
 
     data = request.json
+    print(data)
     temperature = data.get("temperature")
     humidity = data.get("humidity")
     soil_humidity = data.get("soil_humidity")
@@ -108,8 +135,8 @@ def get_pictures():
 
     limit = request.args.get("limit", default=10, type=int)
     page = request.args.get("page", default=1, type=int)
-    timestamp_after = request.args.get("timestamp_after").rstrip("Z") + "+00:00"
-    timestamp_before = request.args.get("timestamp_before").rstrip("Z") + "+00:00"
+    timestamp_after = request.args.get("timestamp_after")
+    timestamp_before = request.args.get("timestamp_before")
     sort = request.args.get("sort", default="asc")  # "asc" or "desc"
 
     # Base query
@@ -117,9 +144,11 @@ def get_pictures():
 
     # Filter by timestamp range
     if timestamp_after:
+        timestamp_after = timestamp_after.rstrip("Z") + "+00:00"
         timestamp_after = datetime.fromisoformat(timestamp_after)
         query = query.filter(Picture.timestamp >= timestamp_after)
     if timestamp_before:
+        timestamp_before = timestamp_before.rstrip("Z") + "+00:00"
         timestamp_before = datetime.fromisoformat(timestamp_before)
         query = query.filter(Picture.timestamp <= timestamp_before)
 
@@ -146,8 +175,8 @@ def get_sensor_data():
 
     limit = request.args.get("limit", default=10, type=int)
     page = request.args.get("page", default=1, type=int)
-    timestamp_after = request.args.get("timestamp_after").rstrip("Z") + "+00:00"
-    timestamp_before = request.args.get("timestamp_before").rstrip("Z") + "+00:00"
+    timestamp_after = request.args.get("timestamp_after")
+    timestamp_before = request.args.get("timestamp_before")
     sort = request.args.get("sort", default="asc")  # "asc" or "desc"
 
     # Base query
@@ -155,9 +184,11 @@ def get_sensor_data():
 
     # Filter by timestamp range
     if timestamp_after:
+        timestamp_after = timestamp_after.rstrip("Z") + "+00:00"
         timestamp_after = datetime.fromisoformat(timestamp_after)
         query = query.filter(SensorData.timestamp >= timestamp_after)
     if timestamp_before:
+        timestamp_before = timestamp_before.rstrip("Z") + "+00:00"
         timestamp_before = datetime.fromisoformat(timestamp_before)
         query = query.filter(SensorData.timestamp <= timestamp_before)
 
