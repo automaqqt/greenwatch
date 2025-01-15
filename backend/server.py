@@ -2,7 +2,7 @@ from flask import Flask, request, jsonify, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 import base64, io, json, os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from PIL import Image
 
 
@@ -302,7 +302,7 @@ def get_timelapse_pictures():
     # Convert start_date to UTC
     start_date = datetime.fromisoformat(start_date.rstrip("Z") + "+00:00")
     # Get current time in UTC
-    end_date = datetime.now(start_date.tzinfo)
+    end_date = datetime.now(timezone.utc)
     
     # Get all pictures within the hour range for each day
     pictures = []
@@ -319,11 +319,13 @@ def get_timelapse_pictures():
         ).order_by(Picture.timestamp.asc()).first()
         
         if pic:
+            # Make the timestamp from the database timezone-aware
+            aware_timestamp = pic.timestamp.replace(tzinfo=timezone.utc)
             pictures.append({
                 "id": pic.id,
-                "timestamp": pic.timestamp.isoformat(),
+                "timestamp": aware_timestamp.isoformat(),
                 "image_path": pic.image_path,
-                "day": (pic.timestamp - start_date).days + 1
+                "day": (aware_timestamp - start_date).days + 1
             })
             
         current_date += timedelta(days=1)
