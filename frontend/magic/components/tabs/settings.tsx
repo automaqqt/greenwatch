@@ -6,7 +6,9 @@ const SettingsTab = ({ auth, API_BASE, API_KEY, setAuth }:{auth:{
     isAuthenticated: boolean,
     username: string,
     password: string
-  }, API_BASE:string, API_KEY:string, setAuth:Function}) => {
+  }, API_BASE:string, API_KEY:string, 
+  //eslint-disable-next-line
+  setAuth:Function}) => {
     const [germDate, setGermDate] = useState('');
     
     useEffect(() => {

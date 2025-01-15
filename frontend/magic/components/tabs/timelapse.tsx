@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
-import { Input } from '@/components/ui/input';
 import { Play, Pause, RotateCcw } from 'lucide-react';
 
 interface Picture {
@@ -24,7 +23,7 @@ const TimelapseTab = ({
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
-  const [selectedHour, setSelectedHour] = useState(12);
+  const selectedHour = 12;
   const [germDate, setGermDate] = useState<Date>(new Date);
 
   useEffect(() => {
