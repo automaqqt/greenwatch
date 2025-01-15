@@ -24,7 +24,9 @@ import {
   ResponsiveContainer,
   Legend
 } from 'recharts'
-import { Settings, Image, LineChart as ChartIcon, Menu, X } from 'lucide-react'
+import { Settings, Image, LineChart as ChartIcon, Menu, X, Video } from 'lucide-react'
+import TimelapseTab from '@/components/tabs/timelapse'
+import SettingsTab from '@/components/tabs/settings'
 
 // Types
 interface SensorData {
@@ -63,7 +65,7 @@ export default function Home() {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date())
   const [timeRange, setTimeRange] = useState<number>(12) // Hours
   const [sidebarOpen, setSidebarOpen] = useState(true)
-  const [activeTab, setActiveTab] = useState<'pictures' | 'graphs' | 'settings'>('pictures')
+  const [activeTab, setActiveTab] = useState<'pictures' | 'graphs' | 'settings' | 'timelapse'>('pictures')
   
   // Data state
   const [pictures, setPictures] = useState<Picture[]>([])
@@ -286,6 +288,14 @@ const calculateAbsoluteHumidity = (temperature: number, relativeHumidity: number
 
               {/* Navigation */}
               <div className="hidden sm:flex space-x-4 bg-gray-50 rounded-lg p-1">
+              <Button
+                  variant={activeTab === 'timelapse' ? 'default' : 'ghost'}
+                  onClick={() => setActiveTab('timelapse')}
+                  className="h-9"
+                >
+                  <Video className="w-4 h-4 mr-2" />
+                  Timelapse
+                </Button>
                 <Button
                   variant={activeTab === 'pictures' ? 'default' : 'ghost'}
                   onClick={() => setActiveTab('pictures')}
@@ -391,6 +401,14 @@ const calculateAbsoluteHumidity = (temperature: number, relativeHumidity: number
                   <div
                     className="fixed inset-0 bg-black bg-opacity-50 lg:hidden z-10"
                     onClick={() => setSidebarOpen(false)}
+                  />
+                )}
+
+                {activeTab === 'timelapse' && (
+                  <TimelapseTab
+                    auth={auth}
+                    API_BASE={API_BASE}
+                    API_KEY={API_KEY}
                   />
                 )}
 
@@ -647,25 +665,8 @@ const calculateAbsoluteHumidity = (temperature: number, relativeHumidity: number
             )}
 
             {activeTab === 'settings' && (
-              <Card className="p-4">
-                <h3 className="text-lg font-semibold mb-4">Settings</h3>
-                <div className="space-y-4">
-                  <div>
-                    <p className="text-sm text-gray-500 mb-2">API Endpoint</p>
-                    <Input value={API_BASE} disabled />
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500 mb-2">API Key</p>
-                    <Input value={API_KEY} type="password" disabled />
-                  </div>
-                  <Button
-                    variant="outline"
-                    onClick={() => setAuth({ isAuthenticated: false, username: '', password: '' })}
-                  >
-                    Logout
-                  </Button>
-                </div>
-              </Card>
+              <SettingsTab auth={auth} API_BASE={API_BASE} API_KEY={API_KEY} setAuth={setAuth} >
+              </SettingsTab>
             )}
             </div>
             </div>

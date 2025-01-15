@@ -1,0 +1,9 @@
+{
+    "users": [
+        {
+            "username": "admin",
+            "password": "password",
+            "api_key": "123abc"
+        }
+    ]
+}

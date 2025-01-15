@@ -1,8 +1,8 @@
 from flask import Flask, request, jsonify, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
-import base64, io
-from datetime import datetime
+import base64, io, json, os
+from datetime import datetimem, timedelta
 from PIL import Image
 
 
@@ -29,6 +29,13 @@ class SensorData(db.Model):
     temperature = db.Column(db.Float, nullable=False)
     humidity = db.Column(db.Float, nullable=False)
     soil_humidity = db.Column(db.Float, nullable=False)
+
+class User(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), unique=True, nullable=False)
+    password = db.Column(db.String(120), nullable=False)
+    germination_date = db.Column(db.DateTime, nullable=True)
+    api_key = db.Column(db.String(120), nullable=False)
 
 # Helper function to check API key
 def validate_key(key):
@@ -243,6 +250,135 @@ def delete_picture(id):
     db.session.commit()
     return jsonify({"message": "Picture deleted"}), 200
 
+
+@app.route("/api/user/preferences", methods=["GET"])
+def get_preferences():
+    key = request.args.get("key")
+    username = request.args.get("username")
+    
+    if not validate_key(key):
+        return jsonify({"error": "Invalid API key"}), 403
+        
+    user = User.query.filter_by(username=username).first()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+        
+    return jsonify({
+        "germination_date": user.germination_date.isoformat() if user.germination_date else None
+    }), 200
+
+@app.route("/api/user/preferences", methods=["POST"])
+def update_preferences():
+    key = request.args.get("key")
+    if not validate_key(key):
+        return jsonify({"error": "Invalid API key"}), 403
+        
+    data = request.json
+    username = data.get("username")
+    germination_date = data.get("germination_date")
+    
+    user = User.query.filter_by(username=username).first()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+        
+    if germination_date:
+        user.germination_date = datetime.fromisoformat(germination_date.rstrip("Z") + "+00:00")
+        
+    db.session.commit()
+    return jsonify({"message": "Preferences updated successfully"}), 200
+
+@app.route("/api/timelapse", methods=["GET"])
+def get_timelapse_pictures():
+    key = request.args.get("key")
+    if not validate_key(key):
+        return jsonify({"error": "Invalid API key"}), 403
+        
+    target_hour = request.args.get("hour", default="12", type=str)
+    start_date = request.args.get("start_date")
+    
+    if not start_date:
+        return jsonify({"error": "Start date is required"}), 400
+        
+    start_date = datetime.fromisoformat(start_date.rstrip("Z") + "+00:00")
+    end_date = datetime.now()
+    
+    # Get all pictures within the hour range for each day
+    pictures = []
+    current_date = start_date
+    
+    while current_date <= end_date:
+        day_start = current_date.replace(hour=int(target_hour), minute=0, second=0, microsecond=0)
+        day_end = day_start + timedelta(hours=1)
+        
+        pic = Picture.query.filter(
+            Picture.timestamp >= day_start,
+            Picture.timestamp < day_end
+        ).order_by(Picture.timestamp.asc()).first()
+        
+        if pic:
+            pictures.append({
+                "id": pic.id,
+                "timestamp": pic.timestamp.isoformat(),
+                "image_path": pic.image_path,
+                "day": (pic.timestamp - start_date).days + 1
+            })
+            
+        current_date += timedelta(days=1)
+        
+    return jsonify({"pictures": pictures}), 200
+
+def initialize_users():
+    """
+    Read users from users.json and create them if they don't exist.
+    users.json format:
+    {
+        "users": [
+            {
+                "username": "admin",
+                "password": "password",
+                "api_key": "123abc"
+            }
+        ]
+    }
+    """
+    try:
+        # Check if users.json exists
+        if not os.path.exists('users.json'):
+            print("users.json not found, skipping user initialization")
+            return
+
+        with open('users.json', 'r') as f:
+            data = json.load(f)
+
+        # Validate JSON structure
+        if not isinstance(data, dict) or 'users' not in data:
+            print("Invalid users.json format")
+            return
+
+        # Create users if they don't exist
+        for user_data in data['users']:
+            if not all(k in user_data for k in ('username', 'password', 'api_key')):
+                print(f"Skipping invalid user data: {user_data}")
+                continue
+
+            existing_user = User.query.filter_by(username=user_data['username']).first()
+            if not existing_user:
+                new_user = User(
+                    username=user_data['username'],
+                    password=user_data['password']
+                )
+                db.session.add(new_user)
+                print(f"Created user: {user_data['username']}")
+
+        db.session.commit()
+        print("User initialization completed")
+
+    except json.JSONDecodeError:
+        print("Error decoding users.json")
+    except Exception as e:
+        print(f"Error initializing users: {str(e)}")
+
+
 # Add a flag to track initialization
 initialized = False
 
@@ -253,6 +389,7 @@ def initialize_once():
         print("Performing one-time initialization")
         # Add your initialization logic here
         db.create_all()
+        initialize_users()
         initialized = True
 
     
