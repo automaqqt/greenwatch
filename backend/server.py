@@ -69,7 +69,7 @@ def upload_picture():
         last_picture = Picture.query.order_by(Picture.timestamp.desc()).first()
         timestamp_obj = datetime.now()
 
-        if not last_picture or (timestamp_obj - last_picture.timestamp).total_seconds() > 540:  # 10 minutes
+        if not last_picture or (timestamp_obj - last_picture.timestamp).total_seconds() > 1740:  # 10 minutes
             # Save the image with a timestamped filename
             day_or_night = "d"
             try:

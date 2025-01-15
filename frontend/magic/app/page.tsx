@@ -14,7 +14,6 @@ import {
   CarouselPrevious,
   type CarouselApi
 } from "@/components/ui/carousel"
-
 import {
   LineChart,
   Line,
@@ -42,13 +41,9 @@ interface Picture {
   image_path: string
 }
 
-interface PaginatedResponse<T> {
-  total: number
-  data: T[]
-}
 
-const API_BASE = 'http://192.168.178.98:5000'
 const API_KEY = '123abc'
+const API_BASE = 'https://farm.vidsoft.net/api'
 const ITEMS_PER_PAGE = 6*24
 
 const CURRENT_IMG : Picture = {
@@ -73,13 +68,10 @@ export default function Home() {
   // Data state
   const [pictures, setPictures] = useState<Picture[]>([])
   const [sensorData, setSensorData] = useState<SensorData[]>([])
-  const [selectedPicture, setSelectedPicture] = useState<Picture | null>(null)
+  const [selectedPicture, setSelectedPicture] = useState<Picture | null>(CURRENT_IMG)
   const [nearestSensorData, setNearestSensorData] = useState<SensorData | null>(null)
   const [carouselApi, setCarouselApi] = useState<CarouselApi>()
-  const [loading, setLoading] = useState({
-    pictures: false,
-    sensorData: false
-  })
+  const [currentTime, setCurrentTime] = useState(Date.now());
 
   // Simple authentication
   const handleLogin = () => {
@@ -92,10 +84,12 @@ export default function Home() {
 const getTimeRange = useCallback(() => {
   const end = new Date(selectedDate);
   end.setHours(23, 59, 59, 999); // End of the selected date
+  end.setHours(end.getHours() + 1);
 
   let start = new Date(selectedDate);
   start.setHours(0, 0, 0, 0); // Start of the selected date
-  console.log(start.toDateString())
+  start.setHours(start.getHours() + 1);
+  //console.log(start.toDateString())
   // add timerange if selecteddate is not today
   if (start.toDateString() === new Date().toDateString()) {
     start = new Date();
@@ -112,12 +106,32 @@ const getTimeRange = useCallback(() => {
   };
 }, [selectedDate, timeRange]);
 
+const calculateAbsoluteHumidity = (temperature: number, relativeHumidity: number): number => {
+  // Convert temperature to Kelvin
+  const T = temperature + 273.15;
+  
+  // Calculate saturation vapor pressure (Magnus formula)
+  // Result in hPa (hectopascals)
+  const saturationVaporPressure = 6.1078 * Math.exp((17.27 * temperature) / (temperature + 237.3));
+  
+  // Calculate actual vapor pressure in hPa
+  const actualVaporPressure = (relativeHumidity / 100) * saturationVaporPressure;
+  
+  // Calculate absolute humidity in g/m³
+  // The constant 2.16679 is a combination of:
+  // - Converting hPa to Pa (*100)
+  // - The molar mass of water (18.01528 g/mol)
+  // - The universal gas constant (8.31447 J/(mol·K))
+  const absoluteHumidity = (2.16679 * actualVaporPressure * 100) / T;
+  
+  // Round to 2 decimal places for practical use
+  return Number(absoluteHumidity.toFixed(2));
+};
   // Fetch data from API
   const fetchData = useCallback(async () => {
     if (!auth.isAuthenticated) return
 
     const { timestamp_after, timestamp_before } = getTimeRange()
-    setLoading({ pictures: true, sensorData: true })
 
     try {
       // Fetch pictures
@@ -131,7 +145,6 @@ const getTimeRange = useCallback(() => {
       const picturesRes = await fetch(picturesUrl.toString())
       const picturesData = await picturesRes.json()
       setPictures(picturesData.pictures)
-      setSelectedPicture(CURRENT_IMG)
 
       // Fetch sensor data
       const sensorUrl = new URL(`${API_BASE}/sensor_data`)
@@ -143,11 +156,13 @@ const getTimeRange = useCallback(() => {
       
       const sensorRes = await fetch(sensorUrl.toString())
       const sensorData = await sensorRes.json()
-      setSensorData(sensorData.sensor_data)
+      const processedSensorData = sensorData.sensor_data.map((data: { temperature: number; humidity: number }) => ({
+        ...data,
+        absolute_humidity: calculateAbsoluteHumidity(data.temperature, data.humidity),
+      }));
+      setSensorData(processedSensorData)
     } catch (error) {
       console.error('Error fetching data:', error)
-    } finally {
-      setLoading({ pictures: false, sensorData: false })
     }
   }, [auth.isAuthenticated, getTimeRange])
 
@@ -162,6 +177,14 @@ const getTimeRange = useCallback(() => {
     // Clean up the interval on unmount
     return () => clearInterval(interval);
   }, [fetchData])
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      setCurrentTime(Date.now());
+    }, 120000); // refresh every 2 minutes
+  
+    return () => clearInterval(intervalId);
+  }, []);
 
   // Find nearest sensor data when picture selected
   useEffect(() => {
@@ -188,11 +211,12 @@ const getTimeRange = useCallback(() => {
     carouselApi.on("select", () => {
       //console.log(pictures)
       
-      setSelectedPicture(pictures[carouselApi.selectedScrollSnap() ])
+      setSelectedPicture(pictures[carouselApi.selectedScrollSnap()])
     })
   }, [carouselApi, pictures])
 
   // Custom tooltip for graphs
+  // eslint-disable-next-line
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
       return (
@@ -200,7 +224,9 @@ const getTimeRange = useCallback(() => {
           <p className="text-sm font-medium text-gray-900">
             {new Date(label).toLocaleString()}
           </p>
-          {payload.map((entry: any) => (
+          
+          {// eslint-disable-next-line
+           payload.map((entry: any) => (
             <p
               key={entry.name}
               className="text-sm"
@@ -408,15 +434,15 @@ const getTimeRange = useCallback(() => {
 
                     {/* Picture carousel */}
                     <div className="flex justify-center">
-                    <Carousel className="w-full max-w-sm lg:max-w-xl" setApi={setCarouselApi} opts={{
+                    <Carousel className="max-w-60 sm:max-w-lg md:max-w-xl lg:w-full" setApi={setCarouselApi} opts={{
                                                     align: "start",
                                                     dragFree: true,
                                                   }}>
                       <CarouselContent>
-                        <CarouselItem key={12345} className="basis-1/3 lg:basis-1/5">
+                        <CarouselItem key={12345} className="basis-1/2 sm:basis-1/3  lg:basis-1/5">
                         <Card
                           key={12345}
-                          className={`overflow-hidden cursor-pointer transition-all hover:shadow-lg ${
+                          className={`overflow-hidden cursor-pointer transition-all hover:shadow-lg m-1 ${
                             selectedPicture?.id === CURRENT_IMG.id 
                               ? 'ring-2 ring-blue-500 shadow-lg' 
                               : 'hover:ring-1 hover:ring-blue-200'
@@ -425,24 +451,27 @@ const getTimeRange = useCallback(() => {
                         >
                           <div className="aspect-square bg-gray-100">
                             <img
-                              src={`${API_BASE}/${CURRENT_IMG.image_path}`}
+                              src={`${API_BASE}/${CURRENT_IMG.image_path}?t=${currentTime}`}
                               alt="Plant"
                               className="w-full h-full object-cover"
                               style={{ transform: 'rotate(180deg)' }}
                             />
                           </div>
-                          <div className="p-3">
+                          <div className="p-2 pl-4">
                             <p className="text-sm text-gray-600">
-                              {new Date().toLocaleString()}
+                              {new Date().toLocaleTimeString(navigator.language, {
+                                                                  hour: '2-digit',
+                                                                  minute:'2-digit'
+                                                                })}
                             </p>
                           </div>
                         </Card>
                         </CarouselItem>
                         {pictures.map(picture => (
-                          <CarouselItem key={picture.id} className="basis-1/3 lg:basis-1/5">
+                          <CarouselItem key={picture.id} className="basis-1/2 sm:basis-1/3  lg:basis-1/5">
                             <Card
                           key={picture.id}
-                          className={`overflow-hidden cursor-pointer transition-all hover:shadow-lg ${
+                          className={`overflow-hidden cursor-pointer transition-all hover:shadow-lg m-1 ${
                             selectedPicture?.id === picture.id 
                               ? 'ring-2 ring-blue-500 shadow-lg' 
                               : 'hover:ring-1 hover:ring-blue-200'
@@ -457,9 +486,12 @@ const getTimeRange = useCallback(() => {
                               style={{ transform: 'rotate(180deg)' }}
                             />
                           </div>
-                          <div className="p-3">
+                          <div className="p-2 pl-4">
                             <p className="text-sm text-gray-600">
-                              {new Date(picture.timestamp).toLocaleString()}
+                              {new Date(picture.timestamp).toLocaleTimeString(navigator.language, {
+                                                                  hour: '2-digit',
+                                                                  minute:'2-digit'
+                                                                })}
                             </p>
                           </div>
                         </Card>
@@ -482,7 +514,7 @@ const getTimeRange = useCallback(() => {
               {/* Combined graph */}
               <Card className="p-6 shadow-md">
                 <h3 className="text-xl font-semibold mb-6 text-gray-900">Environmental Data</h3>
-                <ResponsiveContainer width="100%" height={400}>
+                <ResponsiveContainer width="100%" height={400} style={{ marginLeft: '-2rem' }}>
                   <LineChart data={sensorData}>
                     <CartesianGrid strokeDasharray="3 3" className="opacity-50" />
                     <XAxis
@@ -516,6 +548,15 @@ const getTimeRange = useCallback(() => {
                       type="monotone"
                       dataKey="soil_humidity"
                       stroke="#6366F1"
+                      strokeWidth={2}
+                      dot={false}
+                      activeDot={{ r: 6 }}
+                    />
+                    <Line
+                      name="Absolute Humidity (g/m³)"
+                      type="monotone"
+                      dataKey="absolute_humidity"
+                      stroke="#FF8800"
                       strokeWidth={2}
                       dot={false}
                       activeDot={{ r: 6 }}
