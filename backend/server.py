@@ -299,14 +299,17 @@ def get_timelapse_pictures():
     if not start_date:
         return jsonify({"error": "Start date is required"}), 400
         
+    # Convert start_date to UTC
     start_date = datetime.fromisoformat(start_date.rstrip("Z") + "+00:00")
-    end_date = datetime.now()
+    # Get current time in UTC
+    end_date = datetime.now(start_date.tzinfo)
     
     # Get all pictures within the hour range for each day
     pictures = []
     current_date = start_date
     
     while current_date <= end_date:
+        # Make sure we use timezone-aware datetime objects consistently
         day_start = current_date.replace(hour=int(target_hour), minute=0, second=0, microsecond=0)
         day_end = day_start + timedelta(hours=1)
         
