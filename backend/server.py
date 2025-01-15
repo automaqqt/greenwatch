@@ -365,7 +365,8 @@ def initialize_users():
             if not existing_user:
                 new_user = User(
                     username=user_data['username'],
-                    password=user_data['password']
+                    password=user_data['password'],
+                    api_key=user_data['api_key']
                 )
                 db.session.add(new_user)
                 print(f"Created user: {user_data['username']}")
