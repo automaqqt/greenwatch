@@ -36,12 +36,12 @@ def validate_key(key):
 
 # Routes
 
-@app.route('/uploads/<path:path>')
+@app.route('/api/uploads/<path:path>')
 def send_report(path):
     # Using request args for path will expose you to directory traversal attacks
     return send_from_directory('uploads', path)
 
-@app.route("/upload_picture", methods=["POST"])
+@app.route("/api/upload_picture", methods=["POST"])
 def upload_picture():
     key = request.args.get("key")
     if not validate_key(key):
@@ -96,7 +96,7 @@ def upload_picture():
 
 
 
-@app.route("/upload_sensor_data", methods=["POST"])
+@app.route("/api/upload_sensor_data", methods=["POST"])
 def upload_sensor_data():
     key = request.args.get("key")
     #print(request.data)
@@ -127,7 +127,7 @@ def upload_sensor_data():
 
 
 
-@app.route("/pictures", methods=["GET"])
+@app.route("/api/pictures", methods=["GET"])
 def get_pictures():
     key = request.args.get("key")
     if not validate_key(key):
@@ -167,7 +167,7 @@ def get_pictures():
     return jsonify({"pictures": data, "total": pictures.total}), 200
 
 
-@app.route("/sensor_data", methods=["GET"])
+@app.route("/api/sensor_data", methods=["GET"])
 def get_sensor_data():
     key = request.args.get("key")
     if not validate_key(key):
@@ -214,7 +214,7 @@ def get_sensor_data():
 
 
 
-@app.route("/sensor_data/<int:id>", methods=["DELETE"])
+@app.route("/api/sensor_data/<int:id>", methods=["DELETE"])
 def delete_sensor_data(id):
     key = request.args.get("key")
     if not validate_key(key):
@@ -229,7 +229,7 @@ def delete_sensor_data(id):
     return jsonify({"message": "Sensor data deleted"}), 200
 
 
-@app.route("/pictures/<int:id>", methods=["DELETE"])
+@app.route("/api/pictures/<int:id>", methods=["DELETE"])
 def delete_picture(id):
     key = request.args.get("key")
     if not validate_key(key):
@@ -258,4 +258,4 @@ def initialize_once():
     
 
 if __name__ == "__main__":
-    app.run(host="192.168.178.98",debug=True)
+    app.run(host="127.0.0.1",debug=True)
