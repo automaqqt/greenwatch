@@ -1,6 +1,6 @@
 // app/page.tsx
 'use client'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef, KeyboardEvent } from 'react'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -74,6 +74,7 @@ export default function Home() {
   const [nearestSensorData, setNearestSensorData] = useState<SensorData | null>(null)
   const [carouselApi, setCarouselApi] = useState<CarouselApi>()
   const [currentTime, setCurrentTime] = useState(Date.now());
+  const itemRefs = useRef<HTMLDivElement[]>([]);
 
   // Simple authentication
   const handleLogin = () => {
@@ -147,6 +148,7 @@ const calculateAbsoluteHumidity = (temperature: number, relativeHumidity: number
       const picturesRes = await fetch(picturesUrl.toString())
       const picturesData = await picturesRes.json()
       setPictures(picturesData.pictures)
+      setSelectedPicture(picturesData.pictures[0])
 
       // Fetch sensor data
       const sensorUrl = new URL(`${API_BASE}/sensor_data`)
@@ -179,6 +181,10 @@ const calculateAbsoluteHumidity = (temperature: number, relativeHumidity: number
     // Clean up the interval on unmount
     return () => clearInterval(interval);
   }, [fetchData])
+
+  useEffect(() => {
+    itemRefs.current = itemRefs.current.slice(0, pictures.length + 1);
+  }, [pictures]);
 
   useEffect(() => {
     const intervalId = setInterval(() => {
@@ -216,6 +222,39 @@ const calculateAbsoluteHumidity = (temperature: number, relativeHumidity: number
       setSelectedPicture(pictures[carouselApi.selectedScrollSnap()])
     })
   }, [carouselApi, pictures])
+
+  // Handle keyboard navigation
+  const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>, index: number) => {
+    switch (e.key) {
+      case 'ArrowRight':
+        e.preventDefault();
+        if (index < itemRefs.current.length - 1) {
+          //setCurrentFocus(index + 1);
+          itemRefs.current[index + 1].focus();
+          carouselApi?.scrollNext();
+        }
+        break;
+      case 'ArrowLeft':
+        e.preventDefault();
+        if (index > 0) {
+          //setCurrentFocus(index - 1);
+          itemRefs.current[index - 1].focus();
+          carouselApi?.scrollPrev();
+        }
+        break;
+      case 'Enter':
+      case ' ':
+        e.preventDefault();
+        if (index === 0) {
+          setSelectedPicture(CURRENT_IMG);
+        } else {
+          setSelectedPicture(pictures[index - 1]);
+        }
+        break;
+      default:
+        break;
+    }
+  };
 
   // Custom tooltip for graphs
   // eslint-disable-next-line
@@ -460,12 +499,18 @@ const calculateAbsoluteHumidity = (temperature: number, relativeHumidity: number
                         <CarouselItem key={12345} className="basis-1/2 sm:basis-1/3  lg:basis-1/5">
                         <Card
                           key={12345}
+                          ref={(el) => {
+                            if (el) {
+                              itemRefs.current[0] = el;
+                            }
+                          }}
                           className={`overflow-hidden cursor-pointer transition-all hover:shadow-lg m-1 ${
                             selectedPicture?.id === CURRENT_IMG.id 
                               ? 'ring-2 ring-blue-500 shadow-lg' 
                               : 'hover:ring-1 hover:ring-blue-200'
                           }`}
                           onClick={() => setSelectedPicture(CURRENT_IMG)}
+                          onKeyDown={(e) => handleKeyDown(e, -1)}
                         >
                           <div className="aspect-square bg-gray-100">
                             <img
@@ -485,9 +530,14 @@ const calculateAbsoluteHumidity = (temperature: number, relativeHumidity: number
                           </div>
                         </Card>
                         </CarouselItem>
-                        {pictures.map(picture => (
+                        {pictures.map((picture, index) => (
                           <CarouselItem key={picture.id} className="basis-1/2 sm:basis-1/3  lg:basis-1/5">
                             <Card
+                            ref={(el) => {
+                              if (el) {
+                                itemRefs.current[index] = el;
+                              }
+                            }}
                           key={picture.id}
                           className={`overflow-hidden cursor-pointer transition-all hover:shadow-lg m-1 ${
                             selectedPicture?.id === picture.id 
@@ -495,6 +545,7 @@ const calculateAbsoluteHumidity = (temperature: number, relativeHumidity: number
                               : 'hover:ring-1 hover:ring-blue-200'
                           }`}
                           onClick={() => setSelectedPicture(picture)}
+                          onKeyDown={(e) => handleKeyDown(e, index)}
                         >
                           <div className="aspect-square bg-gray-100">
                             <img
