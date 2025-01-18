@@ -27,6 +27,7 @@ import {
 import { Settings, Image, LineChart as ChartIcon, Menu, X, Video } from 'lucide-react'
 import TimelapseTab from '@/components/tabs/timelapse'
 import SettingsTab from '@/components/tabs/settings'
+import VPDCalculator from '@/components/ui/vpd'
 
 // Types
 interface SensorData {
@@ -707,6 +708,12 @@ const calculateAbsoluteHumidity = (temperature: number, relativeHumidity: number
                             {Math.max(...sensorData.map(d => d.soil_humidity)).toFixed(1)}%
                           </span>
                         </div>
+                      </div>
+                    </Card>
+                    <Card className="p-6">
+                      <h4 className="text-sm font-medium text-gray-500 mb-2">VPD</h4>
+                      <div className="space-y-2">
+                        <VPDCalculator API_KEY={API_KEY} />
                       </div>
                     </Card>
                   </>
