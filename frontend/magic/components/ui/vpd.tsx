@@ -15,17 +15,16 @@ const VPDCalculator = (API_KEY: any) => {
     error: 'nope'
   });
   const [vpd, setVpd] = useState<number | null>(null);
-
   // Fetch sensor data
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const response = await fetch(`https://farm.vidsoft.net/api/sensor_data?limit=60&key=${API_KEY}`);
+        const response = await fetch(`https://farm.vidsoft.net/api/sensor_data?sort=desc&limit=10&key=${API_KEY.API_KEY}`);
         const data = await response.json();
         
         // Calculate averages
-        const temps = data.map((d: { temperature: any; }) => d.temperature);
-        const humidities = data.map((d: { humidity: any; }) => d.humidity);
+        const temps = data.sensor_data.map((d: { temperature: any; }) => d.temperature);
+        const humidities = data.sensor_data.map((d: { humidity: any; }) => d.humidity);
         
         const avgTemp = temps.reduce((a: any, b: any) => a + b, 0) / temps.length;
         const avgHumidity = humidities.reduce((a: any, b: any) => a + b, 0) / humidities.length;
@@ -37,6 +36,7 @@ const VPDCalculator = (API_KEY: any) => {
           error: 'nope'
         });
       } catch (error) {
+        console.error('Error fetching sensor data:', error);
         setSensorData(prev => ({
           ...prev,
           loading: false,

@@ -59,7 +59,8 @@ export default function Home() {
   const [auth, setAuth] = useState({
     isAuthenticated: false,
     username: '',
-    password: ''
+    password: '',
+    apiKey: ''
   })
 
   // UI state
@@ -420,7 +421,8 @@ const calculateAbsoluteHumidity = (temperature: number, relativeHumidity: number
                     <Slider
                       value={[timeRange]}
                       onValueChange={(value) => setTimeRange(value[0])}
-                      max={48}
+                      max={24}
+                      min={1}
                       step={1}
                       className="mt-2"
                       disabled={(new Date(selectedDate).toDateString() !== new Date().toDateString())}
@@ -713,7 +715,7 @@ const calculateAbsoluteHumidity = (temperature: number, relativeHumidity: number
                     <Card className="p-6">
                       <h4 className="text-sm font-medium text-gray-500 mb-2">VPD</h4>
                       <div className="space-y-2">
-                        <VPDCalculator API_KEY={API_KEY} />
+                        <VPDCalculator API_KEY={API_KEY} />  
                       </div>
                     </Card>
                   </>
