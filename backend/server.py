@@ -287,50 +287,50 @@ def update_preferences():
     db.session.commit()
     return jsonify({"message": "Preferences updated successfully"}), 200
 
+
+### THIS NEEDS REWORK - bad practice endless loop no ultima exit condition
 @app.route("/api/timelapse", methods=["GET"])
 def get_timelapse_pictures():
     key = request.args.get("key")
     if not validate_key(key):
         return jsonify({"error": "Invalid API key"}), 403
-        
-    target_hour = request.args.get("hour", default="12", type=str)
+
     start_date = request.args.get("start_date")
-    
+
     if not start_date:
         return jsonify({"error": "Start date is required"}), 400
-        
+
     # Convert start_date to UTC
     start_date = datetime.fromisoformat(start_date.rstrip("Z") + "+00:00")
     # Get current time in UTC
-    end_date = datetime.now(timezone.utc)
-    
-    # Get all pictures within the hour range for each day
-    pictures = []
     current_date = start_date
-    
-    while current_date <= end_date:
-        # Make sure we use timezone-aware datetime objects consistently
-        day_start = current_date.replace(hour=int(target_hour), minute=0, second=0, microsecond=0)
-        day_end = day_start + timedelta(hours=1)
-        
+
+    pictures = []
+    while True:
+        # Get the next picture where the filename ends with "d"
         pic = Picture.query.filter(
-            Picture.timestamp >= day_start,
-            Picture.timestamp < day_end
+            Picture.timestamp >= current_date,
+            Picture.image_path.endswith("d.jpg")
         ).order_by(Picture.timestamp.asc()).first()
-        
-        if pic:
-            # Make the timestamp from the database timezone-aware
-            aware_timestamp = pic.timestamp.replace(tzinfo=timezone.utc)
-            pictures.append({
-                "id": pic.id,
-                "timestamp": aware_timestamp.isoformat(),
-                "image_path": pic.image_path,
-                "day": (aware_timestamp - start_date).days + 1
-            })
-            
-        current_date += timedelta(days=1)
-        
+
+        if not pic:
+            # Stop the loop if no more pictures are available
+            break
+
+        # Add the picture to the results
+        aware_timestamp = pic.timestamp.replace(tzinfo=timezone.utc)
+        pictures.append({
+            "id": pic.id,
+            "timestamp": aware_timestamp.isoformat(),
+            "image_path": pic.image_path,
+            "day": (aware_timestamp - start_date).days + 1
+        })
+
+        # Move to the next hour after the current picture's timestamp
+        current_date = pic.timestamp + timedelta(hours=1)
+
     return jsonify({"pictures": pictures}), 200
+
 
 def initialize_users():
     """
