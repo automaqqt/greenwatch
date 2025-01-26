@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { AlertCircle } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
-const VPDCalculator = (API_KEY: any) => {
+const VPDCalculator = ({API_KEY}:{API_KEY: string}) => {
   const [plantTemp, setPlantTemp] = useState('');
   const [sensorData, setSensorData] = useState({
     avgTemp: 0,
@@ -19,15 +19,15 @@ const VPDCalculator = (API_KEY: any) => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const response = await fetch(`https://farm.vidsoft.net/api/sensor_data?sort=desc&limit=10&key=${API_KEY.API_KEY}`);
+        const response = await fetch(`https://farm.vidsoft.net/api/sensor_data?sort=desc&limit=10&key=${API_KEY}`);
         const data = await response.json();
         
         // Calculate averages
-        const temps = data.sensor_data.map((d: { temperature: any; }) => d.temperature);
-        const humidities = data.sensor_data.map((d: { humidity: any; }) => d.humidity);
+        const temps = data.sensor_data.map((d: { temperature: number; }) => d.temperature);
+        const humidities = data.sensor_data.map((d: { humidity: number; }) => d.humidity);
         
-        const avgTemp = temps.reduce((a: any, b: any) => a + b, 0) / temps.length;
-        const avgHumidity = humidities.reduce((a: any, b: any) => a + b, 0) / humidities.length;
+        const avgTemp = temps.reduce((a: number, b: number) => a + b, 0) / temps.length;
+        const avgHumidity = humidities.reduce((a: number, b: number) => a + b, 0) / humidities.length;
         
         setSensorData({
           avgTemp,
