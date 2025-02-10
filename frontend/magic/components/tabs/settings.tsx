@@ -1,3 +1,4 @@
+'use client'
 import { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -76,7 +77,8 @@ const SettingsTab = ({ auth, API_BASE, API_KEY, setAuth }:{auth:{
           </div>
           <Button
             variant="outline"
-            onClick={() => setAuth({ isAuthenticated: false, username: '', password: '' })}
+            onClick={() => {setAuth({ isAuthenticated: false, username: '', password: '', apiKey: '' });
+                localStorage.removeItem('auth');}}
           >
             Logout
           </Button>

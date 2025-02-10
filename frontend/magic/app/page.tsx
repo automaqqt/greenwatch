@@ -44,8 +44,15 @@ interface Picture {
   image_path: string
 }
 
+interface Auth {
+  isAuthenticated: boolean 
+  username: string 
+  password: string 
+  apiKey: string
+}
 
-const API_KEY = '123abc'
+
+const API_KEY = '1sPkngf6aW'
 const API_BASE = 'https://farm.vidsoft.net/api'
 const ITEMS_PER_PAGE = 6*24
 
@@ -55,13 +62,8 @@ const CURRENT_IMG : Picture = {
   image_path: '/uploads/current.jpg'}
 
 export default function Home() {
-  // Auth state
-  const [auth, setAuth] = useState({
-    isAuthenticated: false,
-    username: '',
-    password: '',
-    apiKey: ''
-  })
+  
+  const [auth, setAuth] = useState<Auth>({ isAuthenticated: false, username: '', password: '', apiKey: '' });
 
   // UI state
   const [selectedDate, setSelectedDate] = useState<Date>(new Date())
@@ -78,13 +80,30 @@ export default function Home() {
   const [currentTime, setCurrentTime] = useState(Date.now());
   const itemRefs = useRef<HTMLDivElement[]>([]);
 
+  // Load auth state from localStorage when component mounts
+  useEffect(() => {
+    const storedAuth = localStorage.getItem('auth');
+    if (storedAuth) {
+      setAuth(JSON.parse(storedAuth));
+    }
+  }, []);
+
+  // Save auth state to localStorage when it changes
+  useEffect(() => {
+    localStorage.setItem('auth', JSON.stringify(auth));
+  }, [auth]);
+
   // Simple authentication
   const handleLogin = () => {
     // In a real app, you'd validate against a backend
     if (auth.username === 'admin' && auth.password === 'password') {
-      setAuth(prev => ({ ...prev, isAuthenticated: true }))
+      const newAuthState = { ...auth, isAuthenticated: true };
+      setAuth(newAuthState);
+      localStorage.setItem('auth', JSON.stringify(newAuthState)); // Save to localStorage
     }
-  }
+  };
+
+
 
 const getTimeRange = useCallback(() => {
   const end = new Date(selectedDate);
@@ -294,13 +313,13 @@ const calculateAbsoluteHumidity = (temperature: number, relativeHumidity: number
           <Input
             placeholder="Username"
             value={auth.username}
-            onChange={e => setAuth(prev => ({ ...prev, username: e.target.value }))}
+            onChange={e => setAuth((prev) => ({ ...prev, username: e.target.value }))}
           />
           <Input
             type="password"
             placeholder="Password"
             value={auth.password}
-            onChange={e => setAuth(prev => ({ ...prev, password: e.target.value }))}
+            onChange={e => setAuth((prev) => ({ ...prev, password: e.target.value }))}
           />
           <Button className="w-full" onClick={handleLogin}>Login</Button>
         </Card>
