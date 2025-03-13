@@ -24,10 +24,11 @@ import {
   ResponsiveContainer,
   Legend
 } from 'recharts'
-import { Settings, Image, LineChart as ChartIcon, Menu, X, Video } from 'lucide-react'
+import { Settings, Image, LineChart as ChartIcon, Menu, X, Video, UserPlus } from 'lucide-react'
 import TimelapseTab from '@/components/tabs/timelapse'
 import SettingsTab from '@/components/tabs/settings'
 import VPDCalculator from '@/components/ui/vpd'
+import AdminPanel from '@/components/tabs/admin';
 
 // Types
 interface SensorData {
@@ -52,8 +53,7 @@ interface Auth {
 }
 
 
-const API_KEY = '1sPkngf6aW'
-const API_BASE = 'https://farm.vidsoft.net/api'
+const API_BASE = 'http://127.0.0.1:5000/api'
 const ITEMS_PER_PAGE = 6*24
 
 const CURRENT_IMG : Picture = {
@@ -69,7 +69,7 @@ export default function Home() {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date())
   const [timeRange, setTimeRange] = useState<number>(12) // Hours
   const [sidebarOpen, setSidebarOpen] = useState(true)
-  const [activeTab, setActiveTab] = useState<'pictures' | 'graphs' | 'settings' | 'timelapse'>('pictures')
+  const [activeTab, setActiveTab] = useState<'pictures' | 'graphs' | 'settings' | 'timelapse' | 'admin'>('pictures');
   
   // Data state
   const [pictures, setPictures] = useState<Picture[]>([])
@@ -94,12 +94,44 @@ export default function Home() {
   }, [auth]);
 
   // Simple authentication
-  const handleLogin = () => {
-    // In a real app, you'd validate against a backend
-    if (auth.username === 'admin' && auth.password === 'password') {
-      const newAuthState = { ...auth, isAuthenticated: true };
+  const handleLogin = async () => {
+    try {
+      // Show loading state (you could add a loading state if desired)
+      
+      // Make the API request to login
+      const response = await fetch(`${API_BASE}/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          username: auth.username,
+          password: auth.password,
+        }),
+      });
+      
+      // Parse the response
+      const data = await response.json();
+      
+      if (!response.ok) {
+        // You could set an error state here to show to the user
+        console.error('Login failed:', data.error);
+        return;
+      }
+      
+      // Update auth state with the received API key and authenticated status
+      const newAuthState = { 
+        ...auth, 
+        isAuthenticated: true,
+        apiKey: data.user.api_key
+      };
+      
       setAuth(newAuthState);
-      localStorage.setItem('auth', JSON.stringify(newAuthState)); // Save to localStorage
+      localStorage.setItem('auth', JSON.stringify(newAuthState));
+      
+    } catch (error) {
+      console.error('Login error:', error);
+      // Handle error state
     }
   };
 
@@ -160,7 +192,7 @@ const calculateAbsoluteHumidity = (temperature: number, relativeHumidity: number
     try {
       // Fetch pictures
       const picturesUrl = new URL(`${API_BASE}/pictures`)
-      picturesUrl.searchParams.append('key', API_KEY)
+      picturesUrl.searchParams.append('key', auth.apiKey)
       picturesUrl.searchParams.append('timestamp_after', timestamp_after)
       picturesUrl.searchParams.append('timestamp_before', timestamp_before)
       picturesUrl.searchParams.append('limit', ITEMS_PER_PAGE.toString())
@@ -173,7 +205,7 @@ const calculateAbsoluteHumidity = (temperature: number, relativeHumidity: number
 
       // Fetch sensor data
       const sensorUrl = new URL(`${API_BASE}/sensor_data`)
-      sensorUrl.searchParams.append('key', API_KEY)
+      sensorUrl.searchParams.append('key', auth.apiKey)
       sensorUrl.searchParams.append('timestamp_after', timestamp_after)
       sensorUrl.searchParams.append('timestamp_before', timestamp_before)
       sensorUrl.searchParams.append('limit', '3000')
@@ -305,7 +337,7 @@ const calculateAbsoluteHumidity = (temperature: number, relativeHumidity: number
   }
 
 
-  if (!auth.isAuthenticated) {
+  if (!auth.isAuthenticated){
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-50">
         <Card className="w-96 p-6 space-y-4">
@@ -313,19 +345,30 @@ const calculateAbsoluteHumidity = (temperature: number, relativeHumidity: number
           <Input
             placeholder="Username"
             value={auth.username}
-            onChange={e => setAuth((prev) => ({ ...prev, username: e.target.value }))}
+            onChange={(e) => setAuth((prev) => ({ ...prev, username: e.target.value }))}
           />
           <Input
             type="password"
             placeholder="Password"
             value={auth.password}
-            onChange={e => setAuth((prev) => ({ ...prev, password: e.target.value }))}
+            onChange={(e) => setAuth((prev) => ({ ...prev, password: e.target.value }))}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                handleLogin();
+              }
+            }}
           />
-          <Button className="w-full" onClick={handleLogin}>Login</Button>
+          <Button 
+            className="w-full" 
+            onClick={handleLogin}
+            disabled={!auth.username || !auth.password}
+          >
+            Login
+          </Button>
         </Card>
       </div>
     )
-  }
+  } 
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
@@ -348,6 +391,16 @@ const calculateAbsoluteHumidity = (temperature: number, relativeHumidity: number
 
               {/* Navigation */}
               <div className="hidden sm:flex space-x-4 bg-gray-50 rounded-lg p-1">
+              {auth.username === 'admin' && (
+                <Button
+                  variant={activeTab === 'admin' ? 'default' : 'ghost'}
+                  onClick={() => setActiveTab('admin')}
+                  className="h-9"
+                >
+                  <UserPlus className="w-4 h-4 mr-2" />
+                  Admin
+                </Button>
+              )}
               <Button
                   variant={activeTab === 'timelapse' ? 'default' : 'ghost'}
                   onClick={() => setActiveTab('timelapse')}
@@ -388,6 +441,24 @@ const calculateAbsoluteHumidity = (temperature: number, relativeHumidity: number
         {/* Mobile Navigation */}
         <div className="sm:hidden bg-white border-b">
           <div className="px-4 py-2 flex space-x-2 overflow-x-auto">
+          {auth.username === 'admin' && (
+                    <Button
+                      variant={activeTab === 'admin' ? 'default' : 'ghost'}
+                      onClick={() => setActiveTab('admin')}
+                      className="h-9"
+                    >
+                      <UserPlus className="w-4 h-4 mr-2" />
+                      Admin
+                    </Button>
+                  )}
+                  <Button
+              variant={activeTab === 'timelapse' ? 'default' : 'ghost'}
+              onClick={() => setActiveTab('timelapse')}
+              className="h-9"
+            >
+              <Image className="w-4 h-4 mr-2" />
+              Pictures
+            </Button>
             <Button
               variant={activeTab === 'pictures' ? 'default' : 'ghost'}
               onClick={() => setActiveTab('pictures')}
@@ -396,6 +467,7 @@ const calculateAbsoluteHumidity = (temperature: number, relativeHumidity: number
               <Image className="w-4 h-4 mr-2" />
               Pictures
             </Button>
+
             <Button
               variant={activeTab === 'graphs' ? 'default' : 'ghost'}
               onClick={() => setActiveTab('graphs')}
@@ -424,6 +496,7 @@ const calculateAbsoluteHumidity = (temperature: number, relativeHumidity: number
                 sidebarOpen ? 'translate-x-0' : '-translate-x-full'
               } fixed lg:relative lg:translate-x-0 z-20 w-72 h-full transition-transform duration-300 ease-in-out`}
             >
+              
               <Card className="h-full rounded-none lg:rounded-r-lg shadow-lg">
                 <div className="p-6 space-y-6">
                   <div>
@@ -464,12 +537,12 @@ const calculateAbsoluteHumidity = (temperature: number, relativeHumidity: number
                     onClick={() => setSidebarOpen(false)}
                   />
                 )}
-
+                
                 {activeTab === 'timelapse' && (
                   <TimelapseTab
                     auth={auth}
                     API_BASE={API_BASE}
-                    API_KEY={API_KEY}
+                    API_KEY={auth.apiKey}
                   />
                 )}
 
@@ -734,7 +807,7 @@ const calculateAbsoluteHumidity = (temperature: number, relativeHumidity: number
                     <Card className="p-6">
                       <h4 className="text-sm font-medium text-gray-500 mb-2">VPD</h4>
                       <div className="space-y-2">
-                        <VPDCalculator API_KEY={API_KEY} />  
+                        <VPDCalculator API_KEY={auth.apiKey} />  
                       </div>
                     </Card>
                   </>
@@ -744,8 +817,15 @@ const calculateAbsoluteHumidity = (temperature: number, relativeHumidity: number
             )}
 
             {activeTab === 'settings' && (
-              <SettingsTab auth={auth} API_BASE={API_BASE} API_KEY={API_KEY} setAuth={setAuth} >
+              <SettingsTab auth={auth} API_BASE={API_BASE} API_KEY={auth.apiKey} setAuth={setAuth} >
               </SettingsTab>
+            )}
+            {activeTab === 'admin' && (
+              <AdminPanel
+                auth={auth}
+                API_BASE={API_BASE}
+                API_KEY={auth.apiKey}
+              />
             )}
             </div>
             </div>

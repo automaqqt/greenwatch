@@ -14,9 +14,6 @@ app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///data.db"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 db = SQLAlchemy(app)
 
-# API Key for security
-API_KEY = "123abc"
-
 # Models
 class Picture(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -38,20 +35,58 @@ class User(db.Model):
     api_key = db.Column(db.String(120), nullable=False)
 
 # Helper function to check API key
-def validate_key(key):
-    return key == API_KEY
+def get_user_from_key(api_key):
+    """
+    Validates the API key and returns the associated user if valid.
+    Returns None if the key is invalid.
+    """
+    if not api_key:
+        return None
+        
+    user = User.query.filter_by(api_key=api_key).first()
+    return user
 
-# Routes
+@app.route("/api/login", methods=["POST"])
+def login():
+    try:
+        data = request.json
+        username = data.get("username")
+        password = data.get("password")
+        
+        if not username or not password:
+            return jsonify({"error": "Username and password are required"}), 400
+            
+        # Find the user in the database
+        user = User.query.filter_by(username=username).first()
+        
+        # Check if user exists and password matches
+        if not user or user.password != password:
+            return jsonify({"error": "Invalid username or password"}), 401
+            
+        # Return user info and API key on successful login
+        return jsonify({
+            "message": "Login successful",
+            "user": {
+                "id": user.id,
+                "username": user.username,
+                "api_key": user.api_key,
+            }
+        }), 200
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/uploads/<path:path>')
 def send_report(path):
-    # Using request args for path will expose you to directory traversal attacks
+    # Path validation remains important to prevent directory traversal attacks
     return send_from_directory('uploads', path)
 
 @app.route("/api/upload_picture", methods=["POST"])
 def upload_picture():
     key = request.args.get("key")
-    if not validate_key(key):
+    user = get_user_from_key(key)
+    
+    if not user:
         return jsonify({"error": "Invalid API key"}), 403
 
     data = request.json
@@ -76,7 +111,7 @@ def upload_picture():
         last_picture = Picture.query.order_by(Picture.timestamp.desc()).first()
         timestamp_obj = datetime.now()
 
-        if not last_picture or (timestamp_obj - last_picture.timestamp).total_seconds() > 1740:  # 10 minutes
+        if not last_picture or (timestamp_obj - last_picture.timestamp).total_seconds() > 1740:  # ~29 minutes
             # Save the image with a timestamped filename
             day_or_night = "d"
             try:
@@ -102,12 +137,39 @@ def upload_picture():
         return jsonify({"error": str(e)}), 500
 
 
+# Example of updating an admin endpoint
+@app.route("/api/admin/users", methods=["GET"])
+def get_users():
+    key = request.args.get("key")
+    user = get_user_from_key(key)
+    
+    if not user:
+        return jsonify({"error": "Invalid API key"}), 403
+        
+    # Only admin can access this endpoint
+    if user.username != "admin":
+        return jsonify({"error": "Unauthorized access"}), 403
+
+    users = User.query.all()
+    user_list = [
+        {
+            "id": u.id,
+            "username": u.username,
+            "password": "••••••••",  # Hide actual password
+            "api_key": u.api_key,
+            "germination_date": u.germination_date.isoformat() if u.germination_date else None
+        }
+        for u in users
+    ]
+    return jsonify({"users": user_list}), 200
+
 
 @app.route("/api/upload_sensor_data", methods=["POST"])
 def upload_sensor_data():
     key = request.args.get("key")
-    #print(request.data)
-    if not validate_key(key):
+    user = get_user_from_key(key)
+    
+    if not user:
         return jsonify({"error": "Invalid API key"}), 403
 
     data = request.json
@@ -133,11 +195,12 @@ def upload_sensor_data():
         return jsonify({"error": str(e)}), 500
 
 
-
 @app.route("/api/pictures", methods=["GET"])
 def get_pictures():
     key = request.args.get("key")
-    if not validate_key(key):
+    user = get_user_from_key(key)
+    
+    if not user:
         return jsonify({"error": "Invalid API key"}), 403
 
     limit = request.args.get("limit", default=10, type=int)
@@ -177,7 +240,9 @@ def get_pictures():
 @app.route("/api/sensor_data", methods=["GET"])
 def get_sensor_data():
     key = request.args.get("key")
-    if not validate_key(key):
+    user = get_user_from_key(key)
+    
+    if not user:
         return jsonify({"error": "Invalid API key"}), 403
 
     limit = request.args.get("limit", default=10, type=int)
@@ -220,11 +285,12 @@ def get_sensor_data():
     return jsonify({"sensor_data": data, "total": sensor_data.total}), 200
 
 
-
 @app.route("/api/sensor_data/<int:id>", methods=["DELETE"])
 def delete_sensor_data(id):
     key = request.args.get("key")
-    if not validate_key(key):
+    user = get_user_from_key(key)
+    
+    if not user:
         return jsonify({"error": "Invalid API key"}), 403
 
     sensor_data = SensorData.query.get(id)
@@ -239,7 +305,9 @@ def delete_sensor_data(id):
 @app.route("/api/pictures/<int:id>", methods=["DELETE"])
 def delete_picture(id):
     key = request.args.get("key")
-    if not validate_key(key):
+    user = get_user_from_key(key)
+    
+    if not user:
         return jsonify({"error": "Invalid API key"}), 403
 
     picture = Picture.query.get(id)
@@ -256,43 +324,56 @@ def get_preferences():
     key = request.args.get("key")
     username = request.args.get("username")
     
-    if not validate_key(key):
-        return jsonify({"error": "Invalid API key"}), 403
-        
-    user = User.query.filter_by(username=username).first()
+    user = get_user_from_key(key)
     if not user:
+        return jsonify({"error": "Invalid API key"}), 403
+    
+    # Only admin can access other users' preferences
+    if user.username != "admin" and user.username != username:
+        return jsonify({"error": "Unauthorized access"}), 403
+        
+    target_user = User.query.filter_by(username=username).first()
+    if not target_user:
         return jsonify({"error": "User not found"}), 404
         
     return jsonify({
-        "germination_date": user.germination_date.isoformat() if user.germination_date else None
+        "germination_date": target_user.germination_date.isoformat() if target_user.germination_date else None
     }), 200
+
 
 @app.route("/api/user/preferences", methods=["POST"])
 def update_preferences():
     key = request.args.get("key")
-    if not validate_key(key):
+    user = get_user_from_key(key)
+    
+    if not user:
         return jsonify({"error": "Invalid API key"}), 403
         
     data = request.json
     username = data.get("username")
     germination_date = data.get("germination_date")
     
-    user = User.query.filter_by(username=username).first()
-    if not user:
+    # Only admin can update other users' preferences
+    if user.username != "admin" and user.username != username:
+        return jsonify({"error": "Unauthorized access"}), 403
+    
+    target_user = User.query.filter_by(username=username).first()
+    if not target_user:
         return jsonify({"error": "User not found"}), 404
         
     if germination_date:
-        user.germination_date = datetime.fromisoformat(germination_date.rstrip("Z") + "+00:00")
+        target_user.germination_date = datetime.fromisoformat(germination_date.rstrip("Z") + "+00:00")
         
     db.session.commit()
     return jsonify({"message": "Preferences updated successfully"}), 200
 
 
-### THIS NEEDS REWORK - bad practice endless loop no ultima exit condition
 @app.route("/api/timelapse", methods=["GET"])
 def get_timelapse_pictures():
     key = request.args.get("key")
-    if not validate_key(key):
+    user = get_user_from_key(key)
+    
+    if not user:
         return jsonify({"error": "Invalid API key"}), 403
 
     start_date = request.args.get("start_date")
@@ -331,6 +412,135 @@ def get_timelapse_pictures():
 
     return jsonify({"pictures": pictures}), 200
 
+
+# Also update the admin management endpoints:
+
+@app.route("/api/admin/users", methods=["POST"])
+def create_user():
+    key = request.args.get("key")
+    user = get_user_from_key(key)
+    
+    if not user:
+        return jsonify({"error": "Invalid API key"}), 403
+        
+    # Only admin can access this endpoint
+    if user.username != "admin":
+        return jsonify({"error": "Unauthorized access"}), 403
+
+    data = request.json
+    username = data.get("username")
+    password = data.get("password")
+    api_key = data.get("api_key")
+
+    if not username or not password:
+        return jsonify({"error": "Username and password are required"}), 400
+
+    # Check if username already exists
+    existing_user = User.query.filter_by(username=username).first()
+    if existing_user:
+        return jsonify({"error": "Username already exists"}), 400
+
+    try:
+        new_user = User(
+            username=username,
+            password=password,
+            api_key=api_key
+        )
+        db.session.add(new_user)
+        db.session.commit()
+
+        return jsonify({
+            "message": "User created successfully",
+            "user": {
+                "id": new_user.id,
+                "username": new_user.username,
+                "api_key": new_user.api_key
+            }
+        }), 201
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/admin/users/<int:user_id>", methods=["PUT"])
+def update_user(user_id):
+    key = request.args.get("key")
+    user = get_user_from_key(key)
+    
+    if not user:
+        return jsonify({"error": "Invalid API key"}), 403
+        
+    # Only admin can access this endpoint
+    if user.username != "admin":
+        return jsonify({"error": "Unauthorized access"}), 403
+
+    target_user = User.query.get(user_id)
+    if not target_user:
+        return jsonify({"error": "User not found"}), 404
+
+    data = request.json
+    username = data.get("username")
+    password = data.get("password")
+    api_key = data.get("api_key")
+
+    if username and username != target_user.username:
+        # Check if the new username already exists
+        existing_user = User.query.filter_by(username=username).first()
+        if existing_user and existing_user.id != user_id:
+            return jsonify({"error": "Username already exists"}), 400
+        target_user.username = username
+
+    if password:
+        target_user.password = password
+
+    if api_key:
+        target_user.api_key = api_key
+
+    try:
+        db.session.commit()
+        return jsonify({
+            "message": "User updated successfully",
+            "user": {
+                "id": target_user.id,
+                "username": target_user.username,
+                "api_key": target_user.api_key
+            }
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/admin/users/<int:user_id>", methods=["DELETE"])
+def delete_user(user_id):
+    key = request.args.get("key")
+    user = get_user_from_key(key)
+    
+    if not user:
+        return jsonify({"error": "Invalid API key"}), 403
+        
+    # Only admin can access this endpoint
+    if user.username != "admin":
+        return jsonify({"error": "Unauthorized access"}), 403
+
+    # Prevent deleting the admin user
+    if user_id == user.id:
+        return jsonify({"error": "Cannot delete admin user"}), 400
+
+    target_user = User.query.get(user_id)
+    if not target_user:
+        return jsonify({"error": "User not found"}), 404
+
+    try:
+        db.session.delete(target_user)
+        db.session.commit()
+        return jsonify({"message": "User deleted successfully"}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
 
 def initialize_users():
     """

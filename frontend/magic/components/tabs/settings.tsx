@@ -64,8 +64,8 @@ const SettingsTab = ({ auth, API_BASE, API_KEY, setAuth }:{auth:{
             <Input value={API_BASE} disabled />
           </div>
           <div>
-            <p className="text-sm text-gray-500 mb-2">API Key</p>
-            <Input value={API_KEY} type="password" disabled />
+            <p className="text-sm text-gray-500 mb-2">Your API Key</p>
+            <Input value={API_KEY}  disabled />
           </div>
           <div>
             <p className="text-sm text-gray-500 mb-2">Germination Date</p>
