@@ -53,7 +53,7 @@ interface Auth {
 }
 
 
-const API_BASE = 'http://127.0.0.1:5000/api'
+const API_BASE = 'https://farm.vidsoft.net/api'
 const ITEMS_PER_PAGE = 6*24
 
 const CURRENT_IMG : Picture = {
