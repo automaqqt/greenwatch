@@ -19,6 +19,7 @@ class Picture(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     timestamp = db.Column(db.DateTime, nullable=False)
     image_path = db.Column(db.String(200), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)  # Add user relationship
 
 class SensorData(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -26,6 +27,7 @@ class SensorData(db.Model):
     temperature = db.Column(db.Float, nullable=False)
     humidity = db.Column(db.Float, nullable=False)
     soil_humidity = db.Column(db.Float, nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)  # Add user relationship
 
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -33,6 +35,8 @@ class User(db.Model):
     password = db.Column(db.String(120), nullable=False)
     germination_date = db.Column(db.DateTime, nullable=True)
     api_key = db.Column(db.String(120), nullable=False)
+    pictures = db.relationship('Picture', backref='user', lazy=True)  # Relationship to pictures
+    sensor_data = db.relationship('SensorData', backref='user', lazy=True)  # Relationship to sensor data
 
 # Helper function to check API key
 def get_user_from_key(api_key):
@@ -103,12 +107,17 @@ def upload_picture():
         # Rotate the image 90 degrees to the right
         rotated_image = image
 
-        # Save the image as current.jpg
-        current_image_path = "uploads/current.jpg"
+        # Create user-specific directory if it doesn't exist
+        user_uploads_dir = f"uploads/user_{user.id}"
+        if not os.path.exists(user_uploads_dir):
+            os.makedirs(user_uploads_dir)
+
+        # Save the image as current.jpg for this user
+        current_image_path = f"{user_uploads_dir}/current.jpg"
         rotated_image.save(current_image_path)
 
-        # Check if 10 minutes have passed since the last saved picture
-        last_picture = Picture.query.order_by(Picture.timestamp.desc()).first()
+        # Check if 10 minutes have passed since the last saved picture for this user
+        last_picture = Picture.query.filter_by(user_id=user.id).order_by(Picture.timestamp.desc()).first()
         timestamp_obj = datetime.now()
 
         if not last_picture or (timestamp_obj - last_picture.timestamp).total_seconds() > 1740:  # ~29 minutes
@@ -123,11 +132,11 @@ def upload_picture():
                 print(f"Error analyzing brightness: {e}")
 
             file_suffix = day_or_night
-            file_path = f"uploads/{timestamp_obj.strftime('%Y%m%d%H%M%S')}_{file_suffix}.jpg"
+            file_path = f"{user_uploads_dir}/{timestamp_obj.strftime('%Y%m%d%H%M%S')}_{file_suffix}.jpg"
             rotated_image.save(file_path)
 
             # Save the record to the database
-            picture = Picture(timestamp=timestamp_obj, image_path=file_path)
+            picture = Picture(timestamp=timestamp_obj, image_path=file_path, user_id=user.id)
             db.session.add(picture)
             db.session.commit()
 
@@ -184,7 +193,11 @@ def upload_sensor_data():
     try:
         timestamp_obj = datetime.now()
         sensor_data = SensorData(
-            timestamp=timestamp_obj, temperature=temperature, humidity=humidity, soil_humidity=soil_humidity
+            timestamp=timestamp_obj, 
+            temperature=temperature, 
+            humidity=humidity, 
+            soil_humidity=soil_humidity,
+            user_id=user.id  # Assign the user_id
         )
         db.session.add(sensor_data)
         db.session.commit()
@@ -203,14 +216,23 @@ def get_pictures():
     if not user:
         return jsonify({"error": "Invalid API key"}), 403
 
+    # Get target user (either current user or a user specified by admin)
+    target_user_id = request.args.get("user_id", type=int)
+    if target_user_id and user.username == "admin":
+        # Admin can view any user's data
+        query_user_id = target_user_id
+    else:
+        # Regular users can only see their own data
+        query_user_id = user.id
+
     limit = request.args.get("limit", default=10, type=int)
     page = request.args.get("page", default=1, type=int)
     timestamp_after = request.args.get("timestamp_after")
     timestamp_before = request.args.get("timestamp_before")
     sort = request.args.get("sort", default="asc")  # "asc" or "desc"
 
-    # Base query
-    query = Picture.query
+    # Base query filtered by user_id
+    query = Picture.query.filter_by(user_id=query_user_id)
 
     # Filter by timestamp range
     if timestamp_after:
@@ -231,7 +253,7 @@ def get_pictures():
     # Pagination
     pictures = query.paginate(page=page, per_page=limit)
     data = [
-        {"id": pic.id, "timestamp": pic.timestamp.isoformat(), "image_path": pic.image_path}
+        {"id": pic.id, "timestamp": pic.timestamp.isoformat(), "image_path": pic.image_path, "user_id": pic.user_id}
         for pic in pictures.items
     ]
     return jsonify({"pictures": data, "total": pictures.total}), 200
@@ -245,14 +267,23 @@ def get_sensor_data():
     if not user:
         return jsonify({"error": "Invalid API key"}), 403
 
+    # Get target user (either current user or a user specified by admin)
+    target_user_id = request.args.get("user_id", type=int)
+    if target_user_id and user.username == "admin":
+        # Admin can view any user's data
+        query_user_id = target_user_id
+    else:
+        # Regular users can only see their own data
+        query_user_id = user.id
+
     limit = request.args.get("limit", default=10, type=int)
     page = request.args.get("page", default=1, type=int)
     timestamp_after = request.args.get("timestamp_after")
     timestamp_before = request.args.get("timestamp_before")
     sort = request.args.get("sort", default="asc")  # "asc" or "desc"
 
-    # Base query
-    query = SensorData.query
+    # Base query filtered by user_id
+    query = SensorData.query.filter_by(user_id=query_user_id)
 
     # Filter by timestamp range
     if timestamp_after:
@@ -279,6 +310,7 @@ def get_sensor_data():
             "temperature": s.temperature,
             "humidity": s.humidity,
             "soil_humidity": s.soil_humidity,
+            "user_id": s.user_id
         }
         for s in sensor_data.items
     ]
@@ -296,6 +328,10 @@ def delete_sensor_data(id):
     sensor_data = SensorData.query.get(id)
     if not sensor_data:
         return jsonify({"error": "Sensor data not found"}), 404
+        
+    # Check if user owns this data or is admin
+    if sensor_data.user_id != user.id and user.username != "admin":
+        return jsonify({"error": "Unauthorized access"}), 403
 
     db.session.delete(sensor_data)
     db.session.commit()
@@ -313,6 +349,10 @@ def delete_picture(id):
     picture = Picture.query.get(id)
     if not picture:
         return jsonify({"error": "Picture not found"}), 404
+        
+    # Check if user owns this picture or is admin
+    if picture.user_id != user.id and user.username != "admin":
+        return jsonify({"error": "Unauthorized access"}), 403
 
     db.session.delete(picture)
     db.session.commit()
@@ -376,6 +416,15 @@ def get_timelapse_pictures():
     if not user:
         return jsonify({"error": "Invalid API key"}), 403
 
+    # Get target user (either current user or a user specified by admin)
+    target_user_id = request.args.get("user_id", type=int)
+    if target_user_id and user.username == "admin":
+        # Admin can view any user's data
+        query_user_id = target_user_id
+    else:
+        # Regular users can only see their own data
+        query_user_id = user.id
+
     start_date = request.args.get("start_date")
 
     if not start_date:
@@ -388,10 +437,11 @@ def get_timelapse_pictures():
 
     pictures = []
     while True:
-        # Get the next picture where the filename ends with "d"
+        # Get the next picture where the filename ends with "d" for this user
         pic = Picture.query.filter(
             Picture.timestamp >= current_date,
-            Picture.image_path.endswith("d.jpg")
+            Picture.image_path.endswith("d.jpg"),
+            Picture.user_id == query_user_id
         ).order_by(Picture.timestamp.asc()).first()
 
         if not pic:
@@ -404,7 +454,8 @@ def get_timelapse_pictures():
             "id": pic.id,
             "timestamp": aware_timestamp.isoformat(),
             "image_path": pic.image_path,
-            "day": (aware_timestamp - start_date).days + 1
+            "day": (aware_timestamp - start_date).days + 1,
+            "user_id": pic.user_id
         })
 
         # Move to the next hour after the current picture's timestamp
